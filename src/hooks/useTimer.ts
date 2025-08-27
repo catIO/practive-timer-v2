@@ -141,6 +141,8 @@ export const useTimer = () => {
 
   // Show notification
   const showNotification = async (title: string, body: string) => {
+    console.log('showNotification called:', { title, body });
+    
     // Try service worker notification first
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
@@ -158,11 +160,13 @@ export const useTimer = () => {
     
     // Audio notification (now async for Safari compatibility)
     try {
+      console.log('Playing audio notification...');
       await audioManagerRef.current.playNotification(
         state.settings.notificationSound,
         state.settings.notificationVolume,
         state.settings.beepCount
       );
+      console.log('Audio notification completed successfully');
     } catch (error) {
       console.warn('Audio notification failed:', error);
     }
@@ -224,7 +228,8 @@ export const useTimer = () => {
       if (isLastSession) {
         // All sessions completed
         releaseWakeLock();
-        showNotification('Pomodoro Complete!', 'All work sessions completed. Great job!');
+        // Show notification asynchronously
+        showNotification('Pomodoro Complete!', 'All work sessions completed. Great job!').catch(console.warn);
         saveProgress(totalSessions);
         return {
           ...prev,
@@ -248,6 +253,8 @@ export const useTimer = () => {
 
       return {
         ...prev,
+        isRunning: false, // Pause after skipping
+        isPaused: true,   // Mark as paused
         isWorkSession: nextIsWork,
         currentInterval: nextInterval,
         timeLeft: nextDuration * 60,
@@ -274,7 +281,8 @@ export const useTimer = () => {
               // All sessions completed
               releaseWakeLock();
               expectedEndTimeRef.current = null;
-              showNotification('Pomodoro Complete!', 'All work sessions completed. Great job!');
+              // Show notification asynchronously
+              showNotification('Pomodoro Complete!', 'All work sessions completed. Great job!').catch(console.warn);
               // Save progress as completed for the day
               saveProgress(totalSessions);
               return {
@@ -287,13 +295,13 @@ export const useTimer = () => {
               };
             }
 
-            // Move to next session
+            // Move to next session and pause
             const nextIsWork = !prev.isWorkSession;
             const nextInterval = nextIsWork ? prev.currentInterval + 1 : prev.currentInterval;
             const nextDuration = nextIsWork ? prev.settings.workDuration : prev.settings.breakDuration;
 
-            // Update expected end time for next session
-            expectedEndTimeRef.current = now + (nextDuration * 60 * 1000);
+            // Clear expected end time since we're pausing
+            expectedEndTimeRef.current = null;
 
             // Save progress when moving to next work session
             if (nextIsWork) {
@@ -301,15 +309,18 @@ export const useTimer = () => {
               saveProgress(nextInterval);
             }
 
+            // Show notification asynchronously
             showNotification(
               nextIsWork ? 'Work Time!' : 'Break Time!',
               nextIsWork 
                 ? `Starting work session ${Math.ceil(nextInterval / 2)} of ${prev.settings.intervals}`
                 : `Take a ${prev.settings.breakDuration} minute break`
-            );
+            ).catch(console.warn);
 
             return {
               ...prev,
+              isRunning: false, // Pause the timer
+              isPaused: true,   // Mark as paused
               isWorkSession: nextIsWork,
               currentInterval: nextInterval,
               timeLeft: nextDuration * 60,
