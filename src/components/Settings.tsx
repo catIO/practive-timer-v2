@@ -28,16 +28,18 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const playPreviewSound = async () => {
     try {
+      console.log('Testing audio preview...');
       await audioManager.current.playNotification(
         settings.notificationSound,
         settings.notificationVolume,
         settings.beepCount
       );
+      console.log('Audio preview completed');
     } catch (error) {
       console.warn('Preview sound failed:', error);
       // Show a simple alert for Safari users
       if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')) {
-        alert('Audio test failed. Please ensure your device is not muted and try again.');
+        alert('Audio test failed. Please ensure your device is not muted and try again. Check the console for more details.');
       }
     }
   };
