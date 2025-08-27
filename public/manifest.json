@@ -1,0 +1,21 @@
+{
+  "name": "Pomodoro Practice Timer",
+  "short_name": "Pomodoro",
+  "description": "A beautiful pomodoro timer for focus and productivity",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1F2937",
+  "theme_color": "#1F2937",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "scope": "/",
+  "lang": "en"
+}
