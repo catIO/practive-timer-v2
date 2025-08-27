@@ -1,39 +1,62 @@
 export class AudioManager {
-  private audio: HTMLAudioElement | null = null;
+  private audioContext: AudioContext | null = null;
+  private isInitialized = false;
 
   constructor() {
-    this.audio = new Audio();
+    // Initialize audio context on first user interaction
+    this.initAudioContext();
+  }
+
+  private async initAudioContext() {
+    if (this.isInitialized) return;
+    
+    try {
+      // Create audio context with proper fallback for Safari
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Resume audio context if suspended (required for Safari)
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+      
+      this.isInitialized = true;
+      console.log('Audio context initialized successfully');
+    } catch (error) {
+      console.warn('Failed to initialize audio context:', error);
+    }
   }
 
   setVolume(volume: number) {
-    if (this.audio) {
-      this.audio.volume = Math.max(0, Math.min(1, volume / 100));
-    }
+    // Volume is handled per sound generation
   }
 
-  playNotification(soundType: string, volume: number, beepCount: number = 1) {
-    if (this.audio) {
-      this.setVolume(volume);
-      // Using Web Audio API to generate notification sounds
-      this.generateNotificationSound(soundType, volume, beepCount);
+  async playNotification(soundType: string, volume: number, beepCount: number = 1) {
+    // Ensure audio context is initialized
+    if (!this.isInitialized) {
+      await this.initAudioContext();
     }
-    
-    // Also try to play a simple audio file for better background support
-    try {
-      const audio = new Audio();
-      audio.volume = volume / 100;
-      // Create a simple beep using oscillator
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
+
+    if (!this.audioContext) {
+      console.warn('Audio context not available');
+      return;
+    }
+
+    // Resume audio context if suspended (Safari requirement)
+    if (this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+      } catch (error) {
+        console.warn('Failed to resume audio context:', error);
+        return;
       }
-    } catch (error) {
-      console.warn('Audio playback failed:', error);
     }
+
+    // Generate the notification sound
+    this.generateNotificationSound(soundType, volume, beepCount);
   }
 
   private generateNotificationSound(type: string, volume: number, beepCount: number) {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (!this.audioContext) return;
 
     const frequencies = {
       bell: [800, 600, 400],
@@ -45,14 +68,14 @@ export class AudioManager {
 
     // Play the specified number of beeps
     for (let beepIndex = 0; beepIndex < beepCount; beepIndex++) {
-      const beepStartTime = audioContext.currentTime + beepIndex * 0.6; // 600ms between beeps
+      const beepStartTime = this.audioContext.currentTime + beepIndex * 0.6; // 600ms between beeps
       
       freqs.forEach((freq, index) => {
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
+        const osc = this.audioContext!.createOscillator();
+        const gain = this.audioContext!.createGain();
         
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.audioContext!.destination);
         
         osc.frequency.setValueAtTime(freq, beepStartTime);
         osc.type = 'sine';

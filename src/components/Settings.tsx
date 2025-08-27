@@ -26,12 +26,20 @@ export const Settings: React.FC<SettingsProps> = ({
     { value: 'beep', label: 'Beep' },
   ];
 
-  const playPreviewSound = () => {
-    audioManager.current.playNotification(
-      settings.notificationSound,
-      settings.notificationVolume,
-      settings.beepCount
-    );
+  const playPreviewSound = async () => {
+    try {
+      await audioManager.current.playNotification(
+        settings.notificationSound,
+        settings.notificationVolume,
+        settings.beepCount
+      );
+    } catch (error) {
+      console.warn('Preview sound failed:', error);
+      // Show a simple alert for Safari users
+      if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')) {
+        alert('Audio test failed. Please ensure your device is not muted and try again.');
+      }
+    }
   };
 
   return (
@@ -161,16 +169,20 @@ export const Settings: React.FC<SettingsProps> = ({
                     name="notificationSound"
                     value={option.value}
                     checked={settings.notificationSound === option.value}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const newSound = e.target.value;
                       onUpdateSettings({ notificationSound: newSound });
                       // Play preview sound after a short delay
-                      setTimeout(() => {
-                        audioManager.current.playNotification(
-                          newSound,
-                          settings.notificationVolume,
-                          1 // Just one beep for sound preview
-                        );
+                      setTimeout(async () => {
+                        try {
+                          await audioManager.current.playNotification(
+                            newSound,
+                            settings.notificationVolume,
+                            1 // Just one beep for sound preview
+                          );
+                        } catch (error) {
+                          console.warn('Sound preview failed:', error);
+                        }
                       }, 100);
                     }}
                     className="w-4 h-4 text-blue-400 bg-gray-700 border-gray-500 focus:ring-blue-400 focus:ring-2"
@@ -192,16 +204,20 @@ export const Settings: React.FC<SettingsProps> = ({
                 min="1"
                 max="10"
                 value={settings.beepCount}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const newBeepCount = parseInt(e.target.value);
                   onUpdateSettings({ beepCount: newBeepCount });
                   // Play preview sound after a short delay
-                  setTimeout(() => {
-                    audioManager.current.playNotification(
-                      settings.notificationSound,
-                      settings.notificationVolume,
-                      newBeepCount
-                    );
+                  setTimeout(async () => {
+                    try {
+                      await audioManager.current.playNotification(
+                        settings.notificationSound,
+                        settings.notificationVolume,
+                        newBeepCount
+                      );
+                    } catch (error) {
+                      console.warn('Sound preview failed:', error);
+                    }
                   }, 100);
                 }}
                 className="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider-dark"

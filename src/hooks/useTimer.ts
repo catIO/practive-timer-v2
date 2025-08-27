@@ -61,11 +61,28 @@ export const useTimer = () => {
   const lastUpdateRef = useRef<number | null>(null);
   const expectedEndTimeRef = useRef<number | null>(null);
 
-  // Request notification permission on first load
+  // Request notification permission and initialize audio on first load
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
+    
+    // Initialize audio context on first user interaction
+    const initAudio = () => {
+      audioManagerRef.current.playNotification('beep', 10, 1).catch(() => {
+        // Silent fail - just initializing audio context
+      });
+      document.removeEventListener('touchstart', initAudio);
+      document.removeEventListener('click', initAudio);
+    };
+    
+    document.addEventListener('touchstart', initAudio, { once: true });
+    document.addEventListener('click', initAudio, { once: true });
+    
+    return () => {
+      document.removeEventListener('touchstart', initAudio);
+      document.removeEventListener('click', initAudio);
+    };
   }, []);
 
   // Handle page visibility change to maintain timer accuracy
@@ -123,7 +140,7 @@ export const useTimer = () => {
   }, []);
 
   // Show notification
-  const showNotification = (title: string, body: string) => {
+  const showNotification = async (title: string, body: string) => {
     // Try service worker notification first
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
@@ -139,12 +156,16 @@ export const useTimer = () => {
       });
     }
     
-    // Fallback audio notification
-    audioManagerRef.current.playNotification(
-      state.settings.notificationSound,
-      state.settings.notificationVolume,
-      state.settings.beepCount
-    );
+    // Audio notification (now async for Safari compatibility)
+    try {
+      await audioManagerRef.current.playNotification(
+        state.settings.notificationSound,
+        state.settings.notificationVolume,
+        state.settings.beepCount
+      );
+    } catch (error) {
+      console.warn('Audio notification failed:', error);
+    }
   };
 
   const updateSettings = useCallback((newSettings: Partial<TimerSettings>) => {
