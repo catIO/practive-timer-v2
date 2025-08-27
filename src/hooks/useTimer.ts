@@ -3,26 +3,52 @@ import { TimerState, TimerSettings } from '../types';
 import { AudioManager } from '../utils/audio';
 
 const defaultSettings: TimerSettings = {
-  workDuration: 25,
+  workDuration: 20,
   breakDuration: 5,
-  intervals: 4,
+  intervals: 6,
   notificationVolume: 50,
   notificationSound: 'bell',
   beepCount: 3,
 };
 
 const STORAGE_KEY = 'pomodoro-settings';
+const PROGRESS_STORAGE_KEY = 'pomodoro-progress';
+const SETTINGS_VERSION_KEY = 'pomodoro-settings-version';
+const CURRENT_VERSION = '2.0'; // Force update to new defaults
 
 export const useTimer = () => {
   const [state, setState] = useState<TimerState>(() => {
+    const savedVersion = localStorage.getItem(SETTINGS_VERSION_KEY);
     const savedSettings = localStorage.getItem(STORAGE_KEY);
-    const settings = savedSettings ? JSON.parse(savedSettings) : defaultSettings;
+    
+    // Force update to new defaults if version is old
+    let settings = defaultSettings;
+    if (savedSettings && savedVersion === CURRENT_VERSION) {
+      settings = JSON.parse(savedSettings);
+    } else {
+      // Clear old settings and save new defaults
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultSettings));
+      localStorage.setItem(SETTINGS_VERSION_KEY, CURRENT_VERSION);
+    }
+    
+    // Check if it's a new day and load/save progress accordingly
+    const today = new Date().toDateString();
+    const savedProgress = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    let progress = { currentInterval: 1, lastDate: today };
+    
+    if (savedProgress) {
+      const parsedProgress = JSON.parse(savedProgress);
+      if (parsedProgress.lastDate === today) {
+        progress = parsedProgress;
+      }
+    }
     
     return {
       timeLeft: settings.workDuration * 60,
       isRunning: false,
       isPaused: false,
-      currentInterval: 1,
+      currentInterval: progress.currentInterval,
       isWorkSession: true,
       settings,
     };
@@ -86,6 +112,16 @@ export const useTimer = () => {
     }
   };
 
+  // Save progress to localStorage
+  const saveProgress = useCallback((currentInterval: number) => {
+    const today = new Date().toDateString();
+    const progress = {
+      currentInterval,
+      lastDate: today
+    };
+    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progress));
+  }, []);
+
   // Show notification
   const showNotification = (title: string, body: string) => {
     // Try service worker notification first
@@ -115,6 +151,7 @@ export const useTimer = () => {
     setState(prev => {
       const updatedSettings = { ...prev.settings, ...newSettings };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSettings));
+      localStorage.setItem(SETTINGS_VERSION_KEY, CURRENT_VERSION);
       
       const isCurrentlyRunning = prev.isRunning;
       
@@ -147,22 +184,27 @@ export const useTimer = () => {
     startTimeRef.current = null;
     lastUpdateRef.current = null;
     expectedEndTimeRef.current = null;
+    // Reset progress for the day
+    saveProgress(1);
     setState(prev => ({
       ...prev,
       isRunning: false,
       isPaused: false,
+      currentInterval: 1,
       timeLeft: prev.isWorkSession ? prev.settings.workDuration * 60 : prev.settings.breakDuration * 60,
     }));
-  }, []);
+  }, [saveProgress]);
 
   const skipSession = useCallback(() => {
     setState(prev => {
-      const isLastWorkSession = prev.isWorkSession && prev.currentInterval === prev.settings.intervals;
+      const totalSessions = prev.settings.intervals * 2; // work + break sessions
+      const isLastSession = prev.currentInterval === totalSessions;
       
-      if (isLastWorkSession) {
+      if (isLastSession) {
         // All sessions completed
         releaseWakeLock();
         showNotification('Pomodoro Complete!', 'All work sessions completed. Great job!');
+        saveProgress(totalSessions);
         return {
           ...prev,
           isRunning: false,
@@ -177,6 +219,12 @@ export const useTimer = () => {
       const nextInterval = nextIsWork ? prev.currentInterval + 1 : prev.currentInterval;
       const nextDuration = nextIsWork ? prev.settings.workDuration : prev.settings.breakDuration;
 
+      // Save progress when skipping to next work session
+      if (nextIsWork) {
+        const workSessionNumber = Math.ceil(nextInterval / 2);
+        saveProgress(nextInterval);
+      }
+
       return {
         ...prev,
         isWorkSession: nextIsWork,
@@ -184,7 +232,7 @@ export const useTimer = () => {
         timeLeft: nextDuration * 60,
       };
     });
-  }, []);
+  }, [saveProgress]);
 
   // Main timer effect with drift compensation
   useEffect(() => {
@@ -198,13 +246,16 @@ export const useTimer = () => {
 
         setState(prev => {
           if (timeLeft <= 0) {
-            const isLastWorkSession = prev.isWorkSession && prev.currentInterval === prev.settings.intervals;
+            const totalSessions = prev.settings.intervals * 2; // work + break sessions
+            const isLastSession = prev.currentInterval === totalSessions;
             
-            if (isLastWorkSession) {
+            if (isLastSession) {
               // All sessions completed
               releaseWakeLock();
               expectedEndTimeRef.current = null;
               showNotification('Pomodoro Complete!', 'All work sessions completed. Great job!');
+              // Save progress as completed for the day
+              saveProgress(totalSessions);
               return {
                 ...prev,
                 isRunning: false,
@@ -223,10 +274,16 @@ export const useTimer = () => {
             // Update expected end time for next session
             expectedEndTimeRef.current = now + (nextDuration * 60 * 1000);
 
+            // Save progress when moving to next work session
+            if (nextIsWork) {
+              const workSessionNumber = Math.ceil(nextInterval / 2);
+              saveProgress(nextInterval);
+            }
+
             showNotification(
               nextIsWork ? 'Work Time!' : 'Break Time!',
               nextIsWork 
-                ? `Starting work session ${nextInterval} of ${prev.settings.intervals}`
+                ? `Starting work session ${Math.ceil(nextInterval / 2)} of ${prev.settings.intervals}`
                 : `Take a ${prev.settings.breakDuration} minute break`
             );
 

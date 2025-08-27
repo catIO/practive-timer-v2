@@ -64,7 +64,7 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-blue-400">
-                    {state.currentInterval - 1}
+                    {Math.max(0, Math.ceil(state.currentInterval / 2) - 1)}
                   </div>
                   <div className="text-sm text-gray-400 font-medium uppercase tracking-wide">
                     Completed
@@ -72,7 +72,7 @@ function App() {
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-emerald-400">
-                    {state.currentInterval}
+                    {Math.ceil(state.currentInterval / 2)}
                   </div>
                   <div className="text-sm text-gray-400 font-medium uppercase tracking-wide">
                     Current
